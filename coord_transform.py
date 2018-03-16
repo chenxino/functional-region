@@ -125,6 +125,6 @@ if __name__ == '__main__':
             gps_calibrate(src, processed_path)
             print("finished {} files".format(counter))
     sp = time.time()
-    print(sp - st)
+    print("used {}s".format(sp - st))
 
 

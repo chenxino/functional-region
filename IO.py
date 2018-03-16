@@ -4,7 +4,7 @@ import glob
 
 
 
-def read_one_sample(sample_dir=r'/home/dlbox/Documents/func_region/Data/Temp/20140804_train.txt', data_type=None):
+def read_one_sample(sample_dir=r'/home/dlbox/Documents/func_region/Data/Temp/gcj09/20140804_train.txt', data_type=None):
     sample_dir = str(sample_dir)
     try:
         print("reading from " + sample_dir)
