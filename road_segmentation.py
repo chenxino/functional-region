@@ -3,79 +3,94 @@ import numpy as np
 from matplotlib import pyplot as plt
 from pprint import pprint
 import os
+from pathlib import Path
+import time
 
 from skimage import measure
 from skimage import filters
+import geopandas as gpd
+from raster_to_polygon_to_geojson import raster2geojson
 
+from skimage.morphology import skeletonize, skeletonize_3d
+from skimage import data
+from skimage.util import invert
 
 def binarize(img):
     return cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 5, 10)
 
+def show(img):
+    plt.figure()
+    plt.imshow(img)
+    plt.show()
 
 def map_segment(map_src):
-    img = cv2.imread(map_src, 0)
+    img = cv2.imread(str(map_src.absolute()), 0)
     binary_img = 255 - binarize(img)
-    plt.figure('original')
-    plt.imshow(binary_img, cmap='gray')
     kernel = np.ones((5,5), np.uint8)
     dilated = cv2.dilate(binary_img, kernel, iterations = 1)
-    #pprint(dilated)
-    dilated = dilated / 255
-    #img_after = zhangSuen(dilated)
-    #img_after = bwmorph_thin(dilated)
-    dilated_src = os.path.join(os.path.dirname(map_src), 'dilated.tiff')
-    cv2.imwrite(dilated_src, dilated)
-    #os.system("/home/dlbox/Documents/func_region/Code/voronoi/build/src/voronoi thin/home/dlbox/Documents/func_region/Code/voronoi/build/src" + " zhang_suen_fast " + dilated_src)
-    img_after = cv2.imread(dilated_src, 0)
+    eroded = dilated
+    dilated_src = map_src.parent.joinpath('dilated.png')
+    # must convert to binary image
+    eroded = eroded / 128
+    cv2.imwrite(str(dilated_src), eroded)
 
+    voronoi_exec = r'/home/dlbox/Documents/func_region/Code/voronoi/build/src/voronoi' 
+    os.system(voronoi_exec + " thin zhang_suen_fast " + str(dilated_src))
+    thinned_dir = map_src.parent.joinpath('thinned_map.png')
+    os.system("mv out_0.png " + str(thinned_dir))
+    img_after = cv2.imread(str(thinned_dir), 0)
     plt.figure('dilated')
     plt.imshow(dilated, cmap='gray')    
 
+    plt.figure("eroded")
+    plt.imshow(eroded, cmap='gray')
+
     plt.figure('processed')
     plt.imshow(img_after, cmap='gray')
-    plt.show()
+    plt.show(block=False)
+    time.sleep(3)
+    plt.close()
 
-def ccl(map_src, connectivity=None):
-    img = cv2.imread(map_src, 0)
+def ccl(map_src, save2disk=False):
+    img = cv2.imread(str(map_src), 0)
     blobs =  binarize(img)
 
     kernel = np.ones((10,10), np.float32) / 25
-    smoothed = cv2.filter2D(blobs, -1, kernel)
-    plt.figure('smoothed')
-    plt.imshow(smoothed)
     blobs = blobs / 255
     #all_labels = measure.label(blobs, connectivity=2)
-    blobs_labels = measure.label(blobs, neighbors=8,connectivity=1, background=0)
+    blobs_labels = measure.label(blobs, neighbors=8, connectivity=1, background=0)
+    array_dir = map_src.parent.joinpath('region_labeled.csv')
+    np.savetxt(array_dir, blobs_labels, fmt='%d')
 
-    """
-    plt.figure(figsize=(9, 3.5), facecolor='None')
-    plt.subplot(131)
-    plt.imshow(blobs, cmap='gray')
-    plt.axis('off')
-    plt.subplot(132)
-    plt.imshow(all_labels, cmap='spectral')
-    plt.axis('off')
-    plt.subplot(133)
-    """
-    plt.figure('ccl')
-    plt.imshow(blobs_labels, cmap='spectral')
-    plt.axis('off')
-    plt.show()
-
-    #cv2.imwrite(os.path.join(os.path.dirname(map_src), 'labeled_map.tiff'), blobs_labels, cmap='spectral')
-
-
+    if save2disk:
+        plt.figure('ccl')
+        plt.imshow(blobs_labels, cmap='nipy_spectral')
+        plt.axis('off')
+        plt.show(block=False)
+        plt.imsave(os.path.dirname(map_src) + '/ccl.png', blobs_labels, cmap='spectral')
+        time.sleep(3)
+        plt.close()
+    
+def geopd(src):
+    roadnet = gpd.read_file(src)
+    roadnet.plot()
+    
 def main():
-    img_src = '../Data/Temp/raster_map.tiff'
-    img_src_2 = '/home/dlbox/Documents/func_region/Data/Temp/map_segmented.png'
+    project_path = Path("/home/dlbox/Documents/func_region")
+    img_src = project_path.joinpath('Data/Temp/raster_map.tiff')
+    img_src_2 = project_path.joinpath('Data/Temp/map_segmented_big_black.tif')
+    thinned_dir = img_src_2.parent.joinpath('thinned_map.png')
+
+    gjson_src = '../Data/Temp/polygon.json'
+
     ## segment regions using roadnetwork
-    #map_segment(img_src)
-
+    #map_segment(img_src_2)
+    
     ## connect component labeling
-    ccl(img_src_2)
+    #ccl(thinned_dir, True)
 
-
-
+    #raster2geojson(img_src_2)
+    #geopd('/home/dlbox/Documents/func_region/Out/Map/QGIS/map_segmented.shp') 
 
 if __name__ == '__main__':
     main()
