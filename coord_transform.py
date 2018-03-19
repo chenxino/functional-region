@@ -5,6 +5,10 @@ import pandas as pd
 from IO import read_one_sample
 import time
 
+import cv2
+from matplotlib import pyplot as plt
+from pathlib import Path
+import numpy as np
 
 x_pi = 3.14159265358979324 * 3000.0 / 180.0
 pi = 3.1415926535897932384626  # π
@@ -107,23 +111,56 @@ def _transformlng(lng, lat):
     return not (lng > 73.66 and lng < 135.05 and lat > 3.86 and lat < 53.55)
 
 
+def gps2xy(lon, lat):
+    # GPS coordinate: (103.9925022, 30.7097699), (104.088888, 30.590768)
+    #raster_loc = (688, 856), (1729, 2144)
+    
+    # calculate coefficient k and b
+    """
+    gpsX = np.array([[103.9925022, 104.088888], [688, 1729]])
+    gpsY = np.array([[30.7097699, 30.590786], [856, 2144]])
+
+    diffX = gpsX[:, 1] - gpsX[:, 0]
+    kx = diffX[1] / diffX[0]
+    bx = gpsX[1, 0] - gpsX[0, 0] * kx
+
+    diffY = gpsY[:, 1] - gpsY[:, 0]
+    ky = diffY[1] / diffY[0]
+    by = gpsY[1, 0] - gpsY[0, 0] * ky
+    print(kx, bx) 
+    print(ky, by)
+    """
+    kx = 10800.3461091
+    bx = -1122467.01651
+    ky = -10824.9939698
+    by = 333289.073981
+    coordX = int(np.round(kx * lon + bx))
+    coordY = int(np.round(ky * lat + by))
+    #print(coordX, coordY)
+    return (coordX, coordY) 
+ 
+
+
 if __name__ == '__main__':
     """
     usage:
     [lon, lat] = wgs84_to_gcj02(lng, lat)
     """
     st = time.time()
-    data_path = Path(r'../Data/Temp/gcj09')
-    processed_path = data_path.parent.joinpath('processed')
-    dirs = data_path.glob('*')
-    counter = 0
-    for src in dirs:
-        if not src.is_file():
-            print("skip " + str(src))
-        else:
-            counter += 1
-            gps_calibrate(src, processed_path)
-            print("finished {} files".format(counter))
+    calibrate_gps = False
+    if calibrate_gps:
+        data_path = Path(r'../Data/Temp/gcj09')
+        processed_path = data_path.parent.joinpath('processed')
+        dirs = data_path.glob('*')
+        counter = 0
+        for src in dirs:
+            if not src.is_file():
+                print("skip " + str(src))
+            else:
+                counter += 1
+                gps_calibrate(src, processed_path)
+                print("finished {} files".format(counter))
+    gps2xy(104.052257, 30.606809)
     sp = time.time()
     print("used {}s".format(sp - st))
 

@@ -8,11 +8,8 @@ import time
 
 from skimage import measure
 from skimage import filters
-import geopandas as gpd
-from raster_to_polygon_to_geojson import raster2geojson
 
 from skimage.morphology import skeletonize, skeletonize_3d
-from skimage import data
 from skimage.util import invert
 
 def binarize(img):
@@ -71,9 +68,6 @@ def ccl(map_src, save2disk=False):
         time.sleep(3)
         plt.close()
     
-def geopd(src):
-    roadnet = gpd.read_file(src)
-    roadnet.plot()
     
 def main():
     project_path = Path("/home/dlbox/Documents/func_region")
@@ -81,16 +75,12 @@ def main():
     img_src_2 = project_path.joinpath('Data/Temp/map_segmented_big_black.tif')
     thinned_dir = img_src_2.parent.joinpath('thinned_map.png')
 
-    gjson_src = '../Data/Temp/polygon.json'
-
     ## segment regions using roadnetwork
-    #map_segment(img_src_2)
+    map_segment(img_src_2)
     
     ## connect component labeling
-    #ccl(thinned_dir, True)
+    ccl(thinned_dir, True)
 
-    #raster2geojson(img_src_2)
-    #geopd('/home/dlbox/Documents/func_region/Out/Map/QGIS/map_segmented.shp') 
 
 if __name__ == '__main__':
     main()
