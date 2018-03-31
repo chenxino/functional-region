@@ -11,7 +11,8 @@ from matplotlib import pyplot as plt
 
 from IO import read_one_sample
 
-def main():
+
+def test1(): 
     img_src = r'/home/dlbox/Documents/func_region/Out/Map/Roadnet Pics/ccl.png'
     img = cv2.imread(img_src, 0)
     #print(img.shape)
@@ -23,6 +24,21 @@ def main():
     mask = (data['id'] != 1) & (data['id'] != 2)& (data['id'] != 3)& (data['id'] != 4)& (data['id'] != 5
     )& (data['id'] != 6)& (data['id'] != 7)
     print(mask)
+
+
+def test_zero():
+    a = np.arange(1,6) * 2
+    b = np.arange(1, 6)
+    c = np.vstack([a, b])
+
+    print(np.sum(c == 2))
+
+
+
+def main():
+    test_zero()
+
+
 
 if __name__ == '__main__':
     main()

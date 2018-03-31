@@ -21,16 +21,17 @@ def show(img):
     plt.show()
 
 def map_segment(map_src):
-    img = cv2.imread(str(map_src.absolute()), 0)
+    img = cv2.imread(map_src, 0)
     binary_img = 255 - binarize(img)
     kernel = np.ones((5,5), np.uint8)
     dilated = cv2.dilate(binary_img, kernel, iterations = 1)
     eroded = dilated
-    dilated_src = map_src.parent.joinpath('dilated.png')
+    dilated_src = 'dilated.png'
     # must convert to binary image
     eroded = eroded / 128
-    cv2.imwrite(str(dilated_src), eroded)
+    cv2.imwrite(str(dilated_src), eroded * 128)
 
+    """
     voronoi_exec = r'/home/dlbox/Documents/func_region/Code/voronoi/build/src/voronoi' 
     os.system(voronoi_exec + " thin zhang_suen_fast " + str(dilated_src))
     thinned_dir = map_src.parent.joinpath('thinned_map.png')
@@ -47,6 +48,7 @@ def map_segment(map_src):
     plt.show(block=False)
     time.sleep(3)
     plt.close()
+    """
 
 def ccl(map_src, save2disk=False):
     img = cv2.imread(str(map_src), 0)
@@ -72,14 +74,14 @@ def ccl(map_src, save2disk=False):
 def main():
     project_path = Path("/home/dlbox/Documents/func_region")
     img_src = project_path.joinpath('Data/Temp/raster_map.tiff')
-    img_src_2 = project_path.joinpath('Data/Temp/map_segmented_big_black.tif')
-    thinned_dir = img_src_2.parent.joinpath('thinned_map.png')
+    img_src_2 = r'/home/dlbox/Documents/func_region/Out/Map/Roadnet Pics/map_segmented_big_balck.tif'
+    
 
     ## segment regions using roadnetwork
     map_segment(img_src_2)
     
     ## connect component labeling
-    ccl(thinned_dir, True)
+    #ccl(thinned_dir, True)
 
 
 if __name__ == '__main__':

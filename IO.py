@@ -15,6 +15,19 @@ def read_one_sample(src, nrows):
     except:
         print(src + " is not exist.")
 
+ 
+def load_gps(src):
+    src = str(src)
+    try:
+        print("reading from " + src)
+        data = pd.read_table(src, names=['id', 'latitude', 'longitude', 'status', 'time'], 
+        sep=',', engine='c', float_precision='high')
+        print(src + " is sucessfully loaded!")
+        return data
+    except:
+        print(src + " is not exist.")
+
+
 
 def read_hp(src):
     src = str(src)
