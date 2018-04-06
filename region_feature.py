@@ -9,20 +9,33 @@ from pprint import pprint
 from collections import OrderedDict
 
 
-from IO import read_one_sample, read_hp
+from IO import load_gps, load_hp
 from coord_transform import gcj02_to_wgs84, gps2xy
 from multiprocessing import Pool, cpu_count, Queue
 from scipy.cluster.vq import kmeans2
+from sklearn.decomposition import LatentDirichletAllocation 
+from sklearn.preprocessing import normalize
 pd.options.mode.chained_assignment = None
+
 
 
 def load_ccl():
     return cv2.imread(str(map_src), 0)
 
 
-def new_file(src):
-    with open(src, 'w') as f:
-        print("created {}".format(src))
+def show_map(label, rail, isSave=False):
+    img = load_ccl()
+    label += 2
+    for k in range(2, len(label) + 2):
+        #skip img == 0 and img == 1
+        img[img == k] = label[k-2] * 27
+    #plt.figure()
+    #plt.axis('off')
+    #plt.imshow(img, cmap='spectral', shape=img.shape)
+    #plt.show()
+    
+    if isSave:
+        plt.imsave(str(map_src.parent / (str(rail) + 'DMR.png')), img, cmap='spectral')
 
 
 def tfidf(): 
@@ -30,10 +43,10 @@ def tfidf():
     
     #tf-idf features
     tf_feature = tfidf_feature(poi_data)
-    (center, label) = kmeans2(tf_feature, 13)
+    (center, label) = kmeans2(tf_feature, 8)
     region_cat = [code_region[x] for x in label]
 
-    #print(label)
+    print(label)
 
     Show = True
     if Show:
@@ -59,7 +72,7 @@ def poi_count(df):
     # every row is a region, except row 0 and 1
     # row0 is on the road
     # row1 is out of boundary
-    points_vec = np.zeros((210,13))
+    points_vec = np.zeros((178,13))
     group = df.groupby('region')
     for key, values in group:
         # key is region number
@@ -70,103 +83,135 @@ def poi_count(df):
     return points_vec[2:]
 
 
+
 def extract_hours(arr):
     #@param arr: '2014/8/30 09:40:52'
     #print(arr.head(10))
-    partitioned = arr.str.split(' ').str[1]
-    hours = partitioned.str.split(':').str[0].as_matrix().astype(int)
-    #@return hours: <class 'pandas.core.series.Series'>
-    return hours - 7
+    partitioned = arr.time.split(' ')[1]
+    hours = partitioned.split(':')[0]
+    return (int(hours) - 7)
 
 
-def extract_type(df):
-    #print(df.head(10))
-    region_dict = {'交通设施服务': 10,
-                    '住宿服务': 9,
-                    '体育休闲服务': 2,
-                    '公司企业': 4,
-                    '医疗保健服务': 12,
-                    '商务住宅': 8,
-                    '政府机构及社会团体': 3,
-                    '生活服务': 6,
-                    '科教文化服务': 0,
-                    '购物服务': 1,
-                    '金融保险服务': 11,
-                    '风景名胜': 5,
-                    '餐饮服务': 7}
+def transition(c_file):
+    df = load_hp(c_file)
+    it = df.itertuples()
+    last_row = next(it)
 
-    #df[['type']] = rtype
-    #print(rtype.head(10))
-    type_code = []
-    for t in df.itertuples():
-        # t[8] is region type, tn is type name.
-        tn = t[8].split(';')[0]
-        #print(tn)
-        if tn not in region_dict:
-            type_code.append(-1)
-        else:
-            type_code.append(region_dict[tn])
-
-
-def calc_pattern(df):
-    #@m
-    pattern = np.zeros((210, 17))
-
-    hours = extract_hours(df['time'])
-    df.loc[:,'time'] = hours
-
-    gred = df.groupby(['region', 'time'])
-    for key, value in gred:
-        X = key[0]
-        Y = key[1]
-        pattern[X, Y] = len(gred.get_group(key))
-
-    return pattern
-
-
-def mobility_pattern(src):
-    data = read_hp(src)
-    #print(data.tail(10))
-
+    leave_mat = np.zeros((178, 178, 17), dtype=int)
+    arrive_mat = np.zeros((178, 178, 17), dtype=int)
     
-    grouped = data.groupby('status')
+    for row in it:
+        if row.id == last_row.id:
+            if row.status == 0:
+                # 1 -> 0: arrive
+                (region_orig, leave_time) = (last_row.region, extract_hours(last_row))
+                (region_dest, arrive_time) = (row.region, extract_hours(row))
+                
+                leave_mat[region_orig, region_dest, leave_time] += 1
+                arrive_mat[region_dest, region_orig, arrive_time] += 1
+                #pprint(leave_mat[region_orig, region_dest, leave_time])
+        last_row = row
+    return (str(c_file.name).split('_')[0], (leave_mat[2:, 2:, :], arrive_mat[2:, 2:, :]))
+   
+        
+def mobility_pattern():
+    hp_dir = Path(r'/home/dlbox/Documents/func_region/Data/hot_point')
+    files = hp_dir.glob('*txt.hotpoint')
+    leave_mat_list = []
+    arrive_mat_list = []
 
-    leave_pattern = calc_pattern(grouped.get_group(1))
-    arrive_pattern = calc_pattern(grouped.get_group(0))
+    #files = [x for x in files]
+    multiCore = 1
+    if multiCore:
+        q = Queue()
+        pool = Pool(processes=10)
+        results = pool.imap(transition, files)
+        pool.close()
+        pool.join()
 
-    pprint(leave_pattern)
-    print(leave_pattern[0])
-    plt.figure()
-    plt.plot(leave_pattern[1])
-    plt.plot(leave_pattern[209])
-    plt.figure()
-    plt.imshow(leave_pattern)
-    plt.show() 
+        data_list = {}
+        for r in results:
+            data_list[r[0]] = r[1]
+            
+        #@data_list_sorted: {date: (leave_mat, arrive_mat)} 
+        data_list_sorted = OrderedDict(sorted(data_list.items(), key = lambda t: t[0]))
+        for k, v in data_list_sorted.items():
+            leave_mat_list.append(v[0])
+            arrive_mat_list.append(v[1])
+
+    return (np.concatenate(leave_mat_list, axis=2), np.concatenate(arrive_mat_list, axis=2))
     
 
-def LDA():
-    hp_dir = Path(r'/home/dlbox/Documents/func_region/Data/Temp/processed')
-    files = hp_dir.glob('*point')
-    #mobility_pattern(next(files))
-    frequency_density()
+def print_top_words(model, feature_names, n_top_words):
+    for topic_idx, topic in enumerate(model.components_):
+        message = "Topic #%d: " % topic_idx
+        message += " ".join([feature_names[i]
+                             for i in topic.argsort()[:-n_top_words - 1:-1]])
+        print(message)
+    print()
+
+
+def test_lda():
+
+    have_FD = True
+    have_mb_pattern = True
+    #@param - FD: frequency density, each row is a region
+    if have_FD:
+        FD = pd.read_table(r'/home/dlbox/Documents/func_region/Data/Temp/frequency_density', float_precision='high', sep=' ') 
+        FD = FD.as_matrix()
+        FD = FD[:, :-1]
+    else:
+        FD = normalize(frequency_density())
+    
+    if have_mb_pattern: 
+        corpus = pd.read_table(r'/home/dlbox/Documents/func_region/Data/Temp/frequency_density', sep=' ') 
+        corpus = corpus.as_matrix().astype('int')
+        #print(corpus.shape)
+        #corpus =  np.loadtxt(r'/home/dlbox/Documents/func_region/Data/Temp/transition.ndarray', dtype='int')
+    else:
+        (leave_mat, arrive_mat) = mobility_pattern()
+        leave_pattern = leave_mat.reshape((leave_mat.shape[0], -1))
+        arrive_pattern = arrive_mat.reshape((arrive_mat.shape[0], -1))
+        corpus = np.concatenate((leave_pattern, arrive_pattern), axis=1)
+
+    print("data loaded, initializing...")
+    lda = LatentDirichletAllocation(13 , max_iter=5, learning_offset=10, random_state=0)
+    print('*********************************')
+    print('fit_transform LDA...')
+    print('*********************************')
+
+    topics = lda.fit_transform(corpus)
+    for k in range(4, 14):
+        print("evaluate k=".format(k))
+        (center, label) = kmeans2(topics + FD, k)
+        #print(label)
+        show_map(label, k, True)
+
+
+def save_transition():
+    (leave_mat, arrive_mat) = mobility_pattern()
+    leave_pattern = leave_mat.reshape((leave_mat.shape[0], -1))
+    arrive_pattern = arrive_mat.reshape((arrive_mat.shape[0], -1))
+    corpus = np.concatenate((leave_pattern, arrive_pattern), axis=1)
+    
+    save_dir = Path(r'/home/dlbox/Documents/func_region/Data/Temp/processed/transition.ndarray')
+    np.savetxt(str(save_dir), corpus, fmt='%.0f', delimiter=' ')
 
 
 def frequency_density():
     poi_data = pd.read_csv(poi_src)
     poi_vec = poi_count(poi_data)
-    
-    #FD = POI_i / Area_r
     img = load_ccl()
     
-    #area = np.array([np.sum(img == k) for k in range(210)])
-    marks = {}
-    for x in np.nditer(img):
-        x = int(x)
-        if x not in marks:
-            marks[x] = 1
-        else:
-            marks[x] += 1
-    pprint(marks)
+    #counts: pixels per region
+    unique, counts = np.unique(img, return_counts=True)
+    counts = counts[2:]
+    n_region = poi_vec.shape[0]
+    n_category = poi_vec.shape[1]
+    FD = np.zeros((n_region, n_category+1))
+    for k in range(n_region):
+        FD[k,:] = np.append(poi_vec[k] / counts[k], np.array([1]))
+    return FD
 
 
 #@param hash typename to column index
@@ -189,23 +234,23 @@ poi_src = r'/home/dlbox/Documents/func_region/Data/Point/total.csv'
 
 
 def main():
+    #FD = frequency_density()
+    #np.savetxt('/home/dlbox/Documents/func_region/Data/Temp/frequency_density', FD, fmt='%.8f', delimiter=' ')
     #flag: True for build mobility pattern, extract 
-    test_TF_IDF = False
-    test_LDA = True
+    test_TF_IDF = 0
+    test_LDA = 1
+    saveTransition = 0
 
 
-    MAX_CORE = cpu_count() - 2
     start_time = time.time()
 
     if test_TF_IDF:
         tfidf()
-
     if test_LDA:
-        #
-        #  Transfer GPS hot_points to axis
-        #  longitude -> x, latitude -> y
-        #  
-        LDA()
+       test_lda()
+    if saveTransition:
+        save_transition()
+    
     finish_time = time.time()
     print("used {}s".format(finish_time - start_time))
 

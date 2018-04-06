@@ -29,7 +29,7 @@ def load_gps(src):
 
 
 
-def read_hp(src):
+def load_hp(src):
     src = str(src)
     try:
         print("reading from " + src)
